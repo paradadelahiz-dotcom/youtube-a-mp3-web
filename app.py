@@ -25,64 +25,43 @@ def valid_youtube_url(url):
         r"^https?://(www\.)?youtube\.com/embed/",
     ]
 
-    return any(re.search(pattern, url) for pattern in patterns)
+    return any(re.search(p, url) for p in patterns)
 
 
 # =========================
-# WEB PRINCIPAL
+# PÁGINA PRINCIPAL
 # =========================
 
 @app.route("/")
 def index():
-    index_file = BASE_DIR / "índice.html"
+    for name in ("índice.html", "index.html"):
+        file = BASE_DIR / name
+        if file.exists():
+            return send_file(file)
 
-    if index_file.exists():
-        return send_file(index_file)
-
-    index_file = BASE_DIR / "index.html"
-
-    if index_file.exists():
-        return send_file(index_file)
-
-    return "No se encontró el archivo HTML.", 404
+    return "No se encontró el HTML", 404
 
 
 # =========================
-# ARCHIVOS CSS
+# ARCHIVOS DE LA WEB
 # =========================
 
-@app.route("/estilos.css")
-def css():
-    return send_from_directory(BASE_DIR, "estilos.css")
+@app.route("/<path:filename>")
+def files(filename):
 
+    # Primero busca archivos directamente en la raíz
+    root_file = BASE_DIR / filename
 
-# =========================
-# JAVASCRIPT
-# =========================
+    if root_file.is_file():
+        return send_file(root_file)
 
-@app.route("/app.js")
-def javascript():
-    return send_from_directory(BASE_DIR, "app.js")
+    # Después busca dentro de activos/
+    asset_file = BASE_DIR / "activos" / filename
 
+    if asset_file.is_file():
+        return send_file(asset_file)
 
-# =========================
-# LOGO Y ACTIVOS
-# =========================
-
-@app.route("/logo.svg")
-def logo():
-    return send_from_directory(
-        BASE_DIR / "activos",
-        "logo.svg"
-    )
-
-
-@app.route("/activos/<path:filename>")
-def activos(filename):
-    return send_from_directory(
-        BASE_DIR / "activos",
-        filename
-    )
+    return "Archivo no encontrado", 404
 
 
 # =========================
@@ -103,23 +82,20 @@ def video_info():
 
     try:
 
-        command = [
-            "yt-dlp",
-            "--dump-single-json",
-            "--no-playlist",
-            "--skip-download",
-            url
-        ]
-
         result = subprocess.run(
-            command,
+            [
+                "yt-dlp",
+                "--dump-single-json",
+                "--no-playlist",
+                "--skip-download",
+                url
+            ],
             capture_output=True,
             text=True,
             timeout=60
         )
 
         if result.returncode != 0:
-
             return jsonify({
                 "success": False,
                 "error": result.stderr[-1500:]
@@ -140,13 +116,6 @@ def video_info():
             "url": url
         })
 
-    except subprocess.TimeoutExpired:
-
-        return jsonify({
-            "success": False,
-            "error": "La búsqueda ha tardado demasiado."
-        }), 504
-
     except Exception as e:
 
         return jsonify({
@@ -166,7 +135,6 @@ def download_mp3():
     url = data.get("url", "").strip()
 
     if not valid_youtube_url(url):
-
         return jsonify({
             "success": False,
             "error": "URL de YouTube no válida."
@@ -174,66 +142,50 @@ def download_mp3():
 
     try:
 
-        output_template = str(
+        output = str(
             DOWNLOAD_DIR / "%(title).200B.%(ext)s"
         )
 
-        command = [
-            "yt-dlp",
-            "--no-playlist",
-            "-x",
-            "--audio-format",
-            "mp3",
-            "--audio-quality",
-            "192K",
-            "-o",
-            output_template,
-            url
-        ]
-
         result = subprocess.run(
-            command,
+            [
+                "yt-dlp",
+                "--no-playlist",
+                "-x",
+                "--audio-format", "mp3",
+                "--audio-quality", "192K",
+                "-o", output,
+                url
+            ],
             capture_output=True,
             text=True,
             timeout=300
         )
 
         if result.returncode != 0:
-
             return jsonify({
                 "success": False,
                 "error": result.stderr[-1500:]
             }), 500
 
-        files = list(
-            DOWNLOAD_DIR.glob("*.mp3")
-        )
+        files = list(DOWNLOAD_DIR.glob("*.mp3"))
 
         if not files:
-
             return jsonify({
                 "success": False,
-                "error": "No se ha podido crear el MP3."
+                "error": "No se pudo crear el MP3."
             }), 500
 
-        latest_file = max(
+        latest = max(
             files,
             key=lambda f: f.stat().st_mtime
         )
 
         return send_file(
-            latest_file,
+            latest,
             as_attachment=True,
-            download_name=latest_file.name,
+            download_name=latest.name,
             mimetype="audio/mpeg"
         )
-
-    except subprocess.TimeoutExpired:
-
-        return jsonify({
-            "success": False,
-            "error": "La conversión ha tardado demasiado."
-        }), 504
 
     except Exception as e:
 
@@ -244,22 +196,18 @@ def download_mp3():
 
 
 # =========================
-# ENLACE DEL EXE
+# URL DEL EXE
 # =========================
 
 @app.route("/api/exe-url")
 def exe_url():
 
-    url = os.environ.get(
-        "EXE_DOWNLOAD_URL",
-        ""
-    ).strip()
+    url = os.environ.get("EXE_DOWNLOAD_URL", "").strip()
 
     if not url:
-
         return jsonify({
             "success": False,
-            "error": "EXE_DOWNLOAD_URL no está configurada."
+            "error": "EXE_DOWNLOAD_URL no configurada."
         }), 404
 
     return jsonify({
@@ -274,9 +222,7 @@ def exe_url():
 
 if __name__ == "__main__":
 
-    port = int(
-        os.environ.get("PORT", 8080)
-    )
+    port = int(os.environ.get("PORT", "8080"))
 
     app.run(
         host="0.0.0.0",
