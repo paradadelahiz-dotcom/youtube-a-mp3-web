@@ -1,231 +1,856 @@
-import os
-import re
-import json
-import tempfile
-import subprocess
-from pathlib import Path
+(function () {
 
-from flask import Flask, jsonify, request, send_file, send_from_directory
-
-app = Flask(__name__)
-
-BASE_DIR = Path(__file__).resolve().parent
-DOWNLOAD_DIR = Path(tempfile.gettempdir()) / "youtube_mp3_downloads"
-DOWNLOAD_DIR.mkdir(parents=True, exist_ok=True)
+  "use strict";
 
 
-def valid_youtube_url(url):
-    if not url:
-        return False
+  /* ==================================================
+     ELEMENTOS
+  ================================================== */
 
-    patterns = [
-        r"^https?://(www\.)?youtube\.com/watch\?",
-        r"^https?://youtu\.be/",
-        r"^https?://(www\.)?youtube\.com/shorts/",
-        r"^https?://(www\.)?youtube\.com/embed/",
-    ]
+  const modal = document.getElementById("download-modal");
+  const openBtn = document.getElementById("open-download");
 
-    return any(re.search(p, url) for p in patterns)
+  const closeEls = modal
+    ? modal.querySelectorAll("[data-close-modal]")
+    : [];
 
+  const appBtn = document.getElementById("app-download-btn");
+  const appBar = document.getElementById("app-progress-bar");
+  const appPercent = document.getElementById("app-percent");
+  const appStatus = document.getElementById("app-status");
 
-# =========================
-# PÁGINA PRINCIPAL
-# =========================
+  const form = document.getElementById("search-form");
+  const urlInput = document.getElementById("url");
+  const searchBtn = document.getElementById("search-btn");
 
-@app.route("/")
-def index():
-    for name in ("índice.html", "index.html"):
-        file = BASE_DIR / name
-        if file.exists():
-            return send_file(file)
+  const result = document.getElementById("search-result");
+  const resultCover = document.getElementById("result-cover");
+  const resultTitle = document.getElementById("result-title");
+  const resultChannel = document.getElementById("result-channel");
+  const resultDuration = document.getElementById("result-duration");
+  const resultDownload = document.getElementById("result-download");
 
-    return "No se encontró el HTML", 404
-
-
-# =========================
-# ARCHIVOS DE LA WEB
-# =========================
-
-@app.route("/<path:filename>")
-def files(filename):
-
-    # Primero busca archivos directamente en la raíz
-    root_file = BASE_DIR / filename
-
-    if root_file.is_file():
-        return send_file(root_file)
-
-    # Después busca dentro de activos/
-    asset_file = BASE_DIR / "activos" / filename
-
-    if asset_file.is_file():
-        return send_file(asset_file)
-
-    return "Archivo no encontrado", 404
+  const error = document.getElementById("error");
 
 
-# =========================
-# INFORMACIÓN DE YOUTUBE
-# =========================
-
-@app.route("/api/info", methods=["POST"])
-def video_info():
-
-    data = request.get_json(silent=True) or {}
-    url = data.get("url", "").strip()
-
-    if not valid_youtube_url(url):
-        return jsonify({
-            "success": False,
-            "error": "Introduce una URL válida de YouTube."
-        }), 400
-
-    try:
-
-        result = subprocess.run(
-            [
-                "yt-dlp",
-                "--dump-single-json",
-                "--no-playlist",
-                "--skip-download",
-                url
-            ],
-            capture_output=True,
-            text=True,
-            timeout=60
-        )
-
-        if result.returncode != 0:
-            return jsonify({
-                "success": False,
-                "error": result.stderr[-1500:]
-            }), 500
-
-        info = json.loads(result.stdout)
-
-        return jsonify({
-            "success": True,
-            "title": info.get("title", "Vídeo"),
-            "channel": (
-                info.get("channel")
-                or info.get("uploader")
-                or ""
-            ),
-            "duration": info.get("duration"),
-            "thumbnail": info.get("thumbnail"),
-            "url": url
-        })
-
-    except Exception as e:
-
-        return jsonify({
-            "success": False,
-            "error": str(e)
-        }), 500
+  let currentUrl = "";
 
 
-# =========================
-# DESCARGA MP3
-# =========================
+  /* ==================================================
+     MODAL
+  ================================================== */
 
-@app.route("/api/download", methods=["POST"])
-def download_mp3():
+  function openModal() {
 
-    data = request.get_json(silent=True) or {}
-    url = data.get("url", "").strip()
+    if (!modal) return;
 
-    if not valid_youtube_url(url):
-        return jsonify({
-            "success": False,
-            "error": "URL de YouTube no válida."
-        }), 400
+    modal.classList.add("is-open");
 
-    try:
+    modal.setAttribute(
+      "aria-hidden",
+      "false"
+    );
 
-        output = str(
-            DOWNLOAD_DIR / "%(title).200B.%(ext)s"
-        )
+    document.body.style.overflow = "hidden";
 
-        result = subprocess.run(
-            [
-                "yt-dlp",
-                "--no-playlist",
-                "-x",
-                "--audio-format", "mp3",
-                "--audio-quality", "192K",
-                "-o", output,
-                url
-            ],
-            capture_output=True,
-            text=True,
-            timeout=300
-        )
-
-        if result.returncode != 0:
-            return jsonify({
-                "success": False,
-                "error": result.stderr[-1500:]
-            }), 500
-
-        files = list(DOWNLOAD_DIR.glob("*.mp3"))
-
-        if not files:
-            return jsonify({
-                "success": False,
-                "error": "No se pudo crear el MP3."
-            }), 500
-
-        latest = max(
-            files,
-            key=lambda f: f.stat().st_mtime
-        )
-
-        return send_file(
-            latest,
-            as_attachment=True,
-            download_name=latest.name,
-            mimetype="audio/mpeg"
-        )
-
-    except Exception as e:
-
-        return jsonify({
-            "success": False,
-            "error": str(e)
-        }), 500
+  }
 
 
-# =========================
-# URL DEL EXE
-# =========================
+  function closeModal() {
 
-@app.route("/api/exe-url")
-def exe_url():
+    if (!modal) return;
 
-    url = os.environ.get("EXE_DOWNLOAD_URL", "").strip()
+    modal.classList.remove("is-open");
 
-    if not url:
-        return jsonify({
-            "success": False,
-            "error": "EXE_DOWNLOAD_URL no configurada."
-        }), 404
+    modal.setAttribute(
+      "aria-hidden",
+      "true"
+    );
 
-    return jsonify({
-        "success": True,
-        "url": url
-    })
+    document.body.style.overflow = "";
+
+  }
 
 
-# =========================
-# ARRANQUE
-# =========================
+  if (openBtn) {
 
-if __name__ == "__main__":
+    openBtn.addEventListener(
+      "click",
+      openModal
+    );
 
-    port = int(os.environ.get("PORT", "8080"))
+  }
 
-    app.run(
-        host="0.0.0.0",
-        port=port,
-        debug=False
-    )
+
+  closeEls.forEach(function (element) {
+
+    element.addEventListener(
+      "click",
+      closeModal
+    );
+
+  });
+
+
+  document.addEventListener(
+    "keydown",
+    function (event) {
+
+      if (
+        event.key === "Escape" &&
+        modal &&
+        modal.classList.contains("is-open")
+      ) {
+
+        closeModal();
+
+      }
+
+    }
+  );
+
+
+  /* ==================================================
+     ERRORES
+  ================================================== */
+
+  function showError(message) {
+
+    if (!error) return;
+
+    error.textContent = message;
+
+    error.hidden = false;
+
+  }
+
+
+  function clearError() {
+
+    if (!error) return;
+
+    error.textContent = "";
+
+    error.hidden = true;
+
+  }
+
+
+  /* ==================================================
+     DURACIÓN
+  ================================================== */
+
+  function duration(seconds) {
+
+    if (!seconds) {
+      return "";
+    }
+
+    seconds = Math.round(
+      Number(seconds)
+    );
+
+    const minutes = Math.floor(
+      seconds / 60
+    );
+
+    const remaining = String(
+      seconds % 60
+    ).padStart(2, "0");
+
+    return minutes + ":" + remaining;
+
+  }
+
+
+  /* ==================================================
+     BÚSQUEDA DE YOUTUBE
+  ================================================== */
+
+  if (form) {
+
+    form.addEventListener(
+      "submit",
+      async function (event) {
+
+        event.preventDefault();
+
+        clearError();
+
+        if (result) {
+          result.hidden = true;
+        }
+
+
+        const value = urlInput
+          ? urlInput.value.trim()
+          : "";
+
+
+        if (!value) {
+
+          showError(
+            "Pega primero un enlace de YouTube."
+          );
+
+          return;
+
+        }
+
+
+        searchBtn.disabled = true;
+
+        searchBtn.innerHTML =
+          "Buscando…";
+
+
+        try {
+
+          const response = await fetch(
+            "/api/info",
+            {
+              method: "POST",
+
+              headers: {
+                "Content-Type":
+                  "application/json"
+              },
+
+              body: JSON.stringify({
+                url: value
+              })
+            }
+          );
+
+
+          const data =
+            await response.json();
+
+
+          if (!response.ok || !data.success) {
+
+            throw new Error(
+              data.error ||
+              "No se pudo encontrar el vídeo."
+            );
+
+          }
+
+
+          /* GUARDAR URL */
+
+          currentUrl = value;
+
+
+          /* TÍTULO */
+
+          resultTitle.textContent =
+            data.title ||
+            "Vídeo de YouTube";
+
+
+          /* CANAL */
+
+          resultChannel.textContent =
+            data.channel ||
+            "YouTube";
+
+
+          /* DURACIÓN */
+
+          resultDuration.textContent =
+            data.duration
+              ? duration(data.duration)
+              : "";
+
+
+          /* ==================================================
+             PORTADA DE YOUTUBE
+          ================================================== */
+
+          if (data.thumbnail) {
+
+            resultCover.src =
+              data.thumbnail;
+
+            resultCover.alt =
+              data.title ||
+              "Portada del vídeo";
+
+
+            /*
+             * Si la miniatura falla,
+             * volvemos al logo de la aplicación.
+             */
+
+            resultCover.onerror =
+              function () {
+
+                this.onerror = null;
+
+                this.src =
+                  "/static/logo.svg";
+
+              };
+
+          } else {
+
+            resultCover.src =
+              "/static/logo.svg";
+
+          }
+
+
+          /* MOSTRAR RESULTADO */
+
+          result.hidden = false;
+
+
+          /* ANIMACIÓN */
+
+          if (result.animate) {
+
+            result.animate(
+              [
+                {
+                  opacity: 0,
+                  transform:
+                    "translateY(15px)"
+                },
+
+                {
+                  opacity: 1,
+                  transform:
+                    "translateY(0)"
+                }
+              ],
+              {
+                duration: 350,
+                easing:
+                  "ease-out"
+              }
+            );
+
+          }
+
+
+          /* SCROLL */
+
+          setTimeout(
+            function () {
+
+              result.scrollIntoView({
+                behavior: "smooth",
+                block: "center"
+              });
+
+            },
+            50
+          );
+
+
+        } catch (err) {
+
+          showError(
+            err.message ||
+            "Ha ocurrido un error."
+          );
+
+        } finally {
+
+          searchBtn.disabled = false;
+
+          searchBtn.innerHTML =
+            'Buscar <span aria-hidden="true">→</span>';
+
+        }
+
+      }
+    );
+
+  }
+
+
+  /* ==================================================
+     DESCARGAR MP3
+  ================================================== */
+
+  async function downloadMp3() {
+
+    if (!currentUrl) {
+
+      showError(
+        "Primero busca un vídeo."
+      );
+
+      return;
+
+    }
+
+
+    clearError();
+
+    resultDownload.disabled = true;
+
+    resultDownload.textContent =
+      "Descargando…";
+
+
+    try {
+
+      const response = await fetch(
+        "/api/download",
+        {
+          method: "POST",
+
+          headers: {
+            "Content-Type":
+              "application/json"
+          },
+
+          body: JSON.stringify({
+            url: currentUrl
+          })
+        }
+      );
+
+
+      if (!response.ok) {
+
+        const data =
+          await response
+            .json()
+            .catch(function () {
+              return {};
+            });
+
+
+        throw new Error(
+          data.error ||
+          "No se pudo descargar el MP3."
+        );
+
+      }
+
+
+      /* OBTENER ARCHIVO */
+
+      const blob =
+        await response.blob();
+
+
+      /* NOMBRE */
+
+      const contentDisposition =
+        response.headers.get(
+          "Content-Disposition"
+        ) || "";
+
+
+      let filename =
+        "audio.mp3";
+
+
+      const match =
+        contentDisposition.match(
+          /filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i
+        );
+
+
+      if (match) {
+
+        filename =
+          decodeURIComponent(
+            match[1] ||
+            match[2]
+          );
+
+      }
+
+
+      /* DESCARGA */
+
+      const objectUrl =
+        URL.createObjectURL(blob);
+
+
+      const link =
+        document.createElement("a");
+
+
+      link.href = objectUrl;
+
+      link.download = filename;
+
+      document.body.appendChild(link);
+
+      link.click();
+
+      link.remove();
+
+
+      setTimeout(
+        function () {
+
+          URL.revokeObjectURL(
+            objectUrl
+          );
+
+        },
+        1000
+      );
+
+
+    } catch (err) {
+
+      showError(
+        err.message ||
+        "No se pudo descargar el MP3."
+      );
+
+    } finally {
+
+      resultDownload.disabled = false;
+
+      resultDownload.textContent =
+        "Descargar";
+
+    }
+
+  }
+
+
+  if (resultDownload) {
+
+    resultDownload.addEventListener(
+      "click",
+      downloadMp3
+    );
+
+  }
+
+
+  /* ==================================================
+     DESCARGA DE LA APLICACIÓN EXE
+  ================================================== */
+
+  async function downloadApp() {
+
+    clearError();
+
+
+    appBtn.disabled = true;
+
+    appBtn.textContent =
+      "Preparando…";
+
+
+    appStatus.textContent =
+      "Preparando descarga…";
+
+
+    appBar.style.width =
+      "2%";
+
+
+    appPercent.textContent =
+      "2%";
+
+
+    try {
+
+      /*
+       * Primero obtenemos la URL pública
+       * configurada en Railway.
+       */
+
+      const infoResponse =
+        await fetch(
+          "/api/exe-url",
+          {
+            cache: "no-store"
+          }
+        );
+
+
+      const info =
+        await infoResponse
+          .json()
+          .catch(function () {
+            return {};
+          });
+
+
+      if (
+        !infoResponse.ok ||
+        !info.success ||
+        !info.url
+      ) {
+
+        throw new Error(
+          info.error ||
+          "No se ha configurado el enlace del EXE."
+        );
+
+      }
+
+
+      /*
+       * Si tenemos una URL pública,
+       * iniciamos la descarga.
+       */
+
+      appStatus.textContent =
+        "Descargando aplicación…";
+
+
+      appBar.style.width =
+        "20%";
+
+
+      appPercent.textContent =
+        "20%";
+
+
+      const response =
+        await fetch(
+          info.url
+        );
+
+
+      if (!response.ok) {
+
+        throw new Error(
+          "No se pudo descargar la aplicación."
+        );
+
+      }
+
+
+      /*
+       * Intentamos mostrar progreso real.
+       */
+
+      const total =
+        Number(
+          response.headers.get(
+            "Content-Length"
+          ) || 0
+        );
+
+
+      const reader =
+        response.body &&
+        response.body.getReader
+          ? response.body.getReader()
+          : null;
+
+
+      let received = 0;
+
+      const chunks = [];
+
+
+      if (reader) {
+
+        while (true) {
+
+          const result =
+            await reader.read();
+
+
+          if (result.done) {
+            break;
+          }
+
+
+          chunks.push(
+            result.value
+          );
+
+
+          received +=
+            result.value.byteLength;
+
+
+          let percent;
+
+
+          if (total > 0) {
+
+            percent =
+              Math.round(
+                received /
+                total *
+                100
+              );
+
+          } else {
+
+            percent =
+              Math.min(
+                99,
+                20 +
+                Math.round(
+                  received /
+                  10000000 *
+                  79
+                )
+              );
+
+          }
+
+
+          percent =
+            Math.min(
+              99,
+              Math.max(
+                2,
+                percent
+              )
+            );
+
+
+          appBar.style.width =
+            percent + "%";
+
+
+          appPercent.textContent =
+            percent + "%";
+
+
+          appStatus.textContent =
+            "Descargando aplicación…";
+
+        }
+
+      } else {
+
+        const buffer =
+          await response.arrayBuffer();
+
+
+        chunks.push(
+          new Uint8Array(buffer)
+        );
+
+
+        appBar.style.width =
+          "90%";
+
+
+        appPercent.textContent =
+          "90%";
+
+      }
+
+
+      /* CREAR EXE */
+
+      const blob =
+        new Blob(
+          chunks,
+          {
+            type:
+              "application/octet-stream"
+          }
+        );
+
+
+      const objectUrl =
+        URL.createObjectURL(
+          blob
+        );
+
+
+      const link =
+        document.createElement("a");
+
+
+      link.href =
+        objectUrl;
+
+
+      link.download =
+        "YouTube a MP3.exe";
+
+
+      document.body.appendChild(
+        link
+      );
+
+
+      link.click();
+
+
+      link.remove();
+
+
+      setTimeout(
+        function () {
+
+          URL.revokeObjectURL(
+            objectUrl
+          );
+
+        },
+        2000
+      );
+
+
+      /* 100% */
+
+      appBar.style.width =
+        "100%";
+
+
+      appPercent.textContent =
+        "100%";
+
+
+      appStatus.textContent =
+        "Descarga completada";
+
+
+    } catch (err) {
+
+      showError(
+        err.message ||
+        "No se pudo descargar la aplicación."
+      );
+
+
+      appStatus.textContent =
+        "No se pudo descargar";
+
+
+      appBar.style.width =
+        "0%";
+
+
+      appPercent.textContent =
+        "0%";
+
+    } finally {
+
+      appBtn.disabled = false;
+
+      appBtn.textContent =
+        "Descargar";
+
+    }
+
+  }
+
+
+  if (appBtn) {
+
+    appBtn.addEventListener(
+      "click",
+      downloadApp
+    );
+
+  }
+
+
+})();
