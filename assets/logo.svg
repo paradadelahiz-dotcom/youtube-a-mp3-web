@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-labelledby="title">
+  <title id="title">YouTube a MP3</title>
+  <defs>
+    <linearGradient id="background" x1="32" y1="18" x2="217" y2="239" gradientUnits="userSpaceOnUse"><stop stop-color="#9B8BFF"/><stop offset="1" stop-color="#5947D7"/></linearGradient>
+    <linearGradient id="note" x1="105" y1="71" x2="151" y2="188" gradientUnits="userSpaceOnUse"><stop stop-color="#fff"/><stop offset="1" stop-color="#e7e4ff"/></linearGradient>
+  </defs>
+  <rect width="256" height="256" rx="66" fill="url(#background)"/>
+  <path d="M55 84c0-18.2 14.8-33 33-33h80c18.2 0 33 14.8 33 33v88c0 18.2-14.8 33-33 33H88c-18.2 0-33-14.8-33-33V84Z" fill="#17172D" opacity=".23"/>
+  <path d="M66 91c0-15.5 12.5-28 28-28h68c15.5 0 28 12.5 28 28v74c0 15.5-12.5 28-28 28H94c-15.5 0-28-12.5-28-28V91Z" fill="#fff" opacity=".15"/>
+  <path d="M112 81v79.5a27.5 27.5 0 1 1-13-23.3V94l61-15v65a27.5 27.5 0 1 1-13-23.3V88.5L112 97v-16Z" fill="url(#note)"/>
+  <circle cx="102" cy="163" r="15" fill="#fff"/><circle cx="150" cy="146" r="15" fill="#fff"/>
+</svg>
