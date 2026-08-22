@@ -63,7 +63,7 @@
   resultDownload.addEventListener('click',downloadMp3);
 
   async function downloadApp(){
-    clearError();appBtn.disabled=true;appStatus.textContent='Preparando descarga…';appBar.style.width='2%';appPercent.textContent='2%';
+    clearError();appBtn.disabled=true;appBtn.textContent='Descargando…';appStatus.textContent='Preparando descarga…';appBar.style.width='2%';appPercent.textContent='2%';
     try{
       const r=await fetch('/api/app-download');
       if(!r.ok){const d=await r.json().catch(()=>({}));throw Error(d.error||'No se ha configurado el enlace del EXE.');}
@@ -75,7 +75,7 @@
           const pct=total?Math.min(99,Math.round(received/total*100)):Math.min(99,Math.round(received/10000000));
           appBar.style.width=pct+'%';appPercent.textContent=pct+'%';appStatus.textContent='Descargando aplicación…';
         }
-      }else{chunks.push(new Uint8Array(await r.arrayBuffer()));}
+      }else{appStatus.textContent='Descargando aplicación…';appBar.style.width='50%';appPercent.textContent='50%';chunks.push(new Uint8Array(await r.arrayBuffer()));}
       const blob=new Blob(chunks,{type:'application/octet-stream'});const objectUrl=URL.createObjectURL(blob);const a=document.createElement('a');a.href=objectUrl;a.download='YouTube a MP3.exe';document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(objectUrl);
       appBar.style.width='100%';appPercent.textContent='100%';appStatus.textContent='Descarga completada';
     }catch(err){showError(err.message);appStatus.textContent='No se pudo descargar';appBar.style.width='0%';appPercent.textContent='0%';}
